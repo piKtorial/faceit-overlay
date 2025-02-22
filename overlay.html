@@ -132,13 +132,10 @@
                 document.getElementById('avgKD').textContent = stats.avgKD;
                 document.getElementById('streak').textContent = stats.streak;
             } else {
-                // Show dashes but keep the last known level icon
+                // Show dashes and hide the level icon
                 document.getElementById('elo').textContent = '-';
                 const levelIcon = document.getElementById('level-icon');
-                if (lastKnownLevel) {
-                    levelIcon.src = LEVEL_ICONS[lastKnownLevel];
-                    levelIcon.style.display = 'inline-block';
-                }
+                levelIcon.style.display = 'none';
                 document.getElementById('matches').textContent = '-';
                 document.getElementById('winRate').textContent = '-';
                 document.getElementById('avgKD').textContent = '-';
