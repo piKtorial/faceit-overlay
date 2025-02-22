@@ -1,7 +1,14 @@
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
+const fs = require('fs');
 const app = express();
+
+// Log all requests at the very start
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    next();
+});
 
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY || '0b636432-33ba-4bac-bd87-86f2686ae602';
 const PLAYER_NAME = process.env.PLAYER_NAME || 'piK';
@@ -13,13 +20,42 @@ app.use((req, res, next) => {
     next();
 });
 
+// Log the current directory and files
+console.log('Current directory:', __dirname);
+console.log('Files in directory:', fs.readdirSync(__dirname));
+
 // Serve overlay.html at root and /overlay.html
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'overlay.html'));
+    const filePath = path.join(__dirname, 'overlay.html');
+    console.log('Attempting to serve:', filePath);
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        console.error('File not found:', filePath);
+        res.status(404).send('overlay.html not found');
+    }
+});
+
+app.get('/test', (req, res) => {
+    const filePath = path.join(__dirname, 'test.html');
+    console.log('Attempting to serve:', filePath);
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        console.error('File not found:', filePath);
+        res.status(404).send('test.html not found');
+    }
 });
 
 app.get('/overlay.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'overlay.html'));
+    const filePath = path.join(__dirname, 'overlay.html');
+    console.log('Attempting to serve:', filePath);
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        console.error('File not found:', filePath);
+        res.status(404).send('overlay.html not found');
+    }
 });
 
 // Health check
@@ -70,10 +106,16 @@ app.get('/api/stats', async (req, res) => {
     }
 });
 
-// Log all requests
-app.use((req, res, next) => {
-    console.log(`${req.method} ${req.path}`);
-    next();
+// Error handler
+app.use((err, req, res, next) => {
+    console.error('Error:', err);
+    res.status(500).send('Something broke!');
+});
+
+// Handle 404
+app.use((req, res) => {
+    console.log('404 for path:', req.path);
+    res.status(404).send('Not found');
 });
 
 const PORT = process.env.PORT || 3000;
