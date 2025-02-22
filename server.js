@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
+const fs = require('fs');
 const app = express();
 
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY || '0b636432-33ba-4bac-bd87-86f2686ae602';
@@ -14,7 +15,26 @@ app.use((req, res, next) => {
 });
 
 // Serve static files
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(__dirname));
+
+// Root route handler
+app.get('/', (req, res) => {
+    const overlayPath = path.join(__dirname, 'overlay.html');
+    if (fs.existsSync(overlayPath)) {
+        res.sendFile(overlayPath);
+    } else {
+        res.send('overlay.html not found. Files in directory: ' + fs.readdirSync(__dirname).join(', '));
+    }
+});
+
+// Test route to see directory contents
+app.get('/test', (req, res) => {
+    const files = fs.readdirSync(__dirname);
+    res.json({
+        currentDirectory: __dirname,
+        files: files
+    });
+});
 
 // Health check endpoint for Render
 app.get('/health', (req, res) => {
@@ -70,5 +90,5 @@ app.get('/api/stats', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    console.log(`Open http://localhost:${PORT}/overlay.html to view your stats`);
+    console.log('Directory contents:', fs.readdirSync(__dirname));
 }); 
