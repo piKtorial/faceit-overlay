@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>FACEIT Stats Overlay</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+        }
+
+        #stats-container {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            width: 300px;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .stat-label {
+            color: #888;
+        }
+
+        .stat-value {
+            color: #00ff88;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .level-icon {
+            width: 32px;
+            height: 32px;
+            vertical-align: middle;
+            object-fit: contain;
+            margin-right: 8px;
+            background: transparent;
+        }
+
+        #error {
+            color: red;
+            display: none;
+            padding: 10px;
+            word-wrap: break-word;
+        }
+
+        #loading {
+            color: white;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div id="stats-container">
+        <div id="loading">Loading FACEIT stats...</div>
+        <div id="error"></div>
+        <div id="stats" style="display: none;">
+            <div class="stat-row">
+                <span class="stat-label">ELO</span>
+                <span class="stat-value">
+                    <img id="level-icon" class="level-icon" src="" alt="FACEIT Level">
+                    <span id="elo">-</span>
+                </span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Matches</span>
+                <span class="stat-value" id="matches">-</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Win Rate</span>
+                <span class="stat-value" id="winRate">-</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Avg K/D</span>
+                <span class="stat-value" id="avgKD">-</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">Win Streak</span>
+                <span class="stat-value" id="streak">-</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Auto-detect if we're running locally or on Render
+        const API_BASE = window.location.hostname === 'localhost' 
+            ? 'http://localhost:3000' 
+            : window.location.origin;
+
+        // FACEIT level icons (simplified versions)
+        const LEVEL_ICONS = {
+            1: 'https://support.faceit.com/hc/article_attachments/10525200575516',
+            2: 'https://support.faceit.com/hc/article_attachments/10525189649308',
+            3: 'https://support.faceit.com/hc/article_attachments/10525200576796',
+            4: 'https://support.faceit.com/hc/article_attachments/10525185037724',
+            5: 'https://support.faceit.com/hc/article_attachments/10525215800860',
+            6: 'https://support.faceit.com/hc/article_attachments/10525245409692',
+            7: 'https://support.faceit.com/hc/article_attachments/10525185034012',
+            8: 'https://support.faceit.com/hc/article_attachments/10525189648796',
+            9: 'https://support.faceit.com/hc/article_attachments/10525200576028',
+            10: 'https://support.faceit.com/hc/article_attachments/10525189646876'
+        };
+
+        async function fetchStats() {
+            try {
+                console.log('Starting to fetch stats...');
+                
+                const response = await fetch(`${API_BASE}/api/stats`);
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
+                }
+
+                const stats = await response.json();
+                console.log('Stats Response:', stats);
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'none';
+                document.getElementById('stats').style.display = 'block';
+
+                // Update all stats
+                document.getElementById('elo').textContent = stats.elo;
+                const levelIcon = document.getElementById('level-icon');
+                levelIcon.src = LEVEL_ICONS[stats.level];
+                levelIcon.style.display = 'inline-block';
+                document.getElementById('matches').textContent = stats.matches || '-';
+                document.getElementById('winRate').textContent = (stats.winRate || '-') + '%';
+                document.getElementById('avgKD').textContent = stats.avgKD || '-';
+                document.getElementById('streak').textContent = stats.streak || '-';
+
+                console.log('Stats updated successfully');
+            } catch (err) {
+                console.error('Error fetching stats:', err);
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('stats').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                
+                document.getElementById('error').textContent = 
+                    `Error: ${err.message}. ${window.location.hostname === 'localhost' ? 'Make sure the server is running (node server.js)' : ''}`;
+            }
+        }
+
+        // Fetch stats immediately and then every 5 minutes
+        fetchStats();
+        setInterval(fetchStats, 5 * 60 * 1000);
+    </script>
+</body>
+</html> 

@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: faceit-overlay
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: FACEIT_API_KEY
+        sync: false
+      - key: PLAYER_NAME
+        sync: false 
