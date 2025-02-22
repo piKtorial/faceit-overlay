@@ -1,13 +1,12 @@
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
-const fs = require('fs');
 const app = express();
 
 const FACEIT_API_KEY = process.env.FACEIT_API_KEY || '0b636432-33ba-4bac-bd87-86f2686ae602';
 const PLAYER_NAME = process.env.PLAYER_NAME || 'piK';
 
-// Enable CORS for all routes
+// Enable CORS
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
@@ -15,36 +14,16 @@ app.use((req, res, next) => {
 });
 
 // Serve static files
-app.use(express.static(__dirname));
+app.use('/', express.static(path.join(__dirname)));
 
-// Root route handler
-app.get('/', (req, res) => {
-    const overlayPath = path.join(__dirname, 'overlay.html');
-    if (fs.existsSync(overlayPath)) {
-        res.sendFile(overlayPath);
-    } else {
-        res.send('overlay.html not found. Files in directory: ' + fs.readdirSync(__dirname).join(', '));
-    }
-});
-
-// Test route to see directory contents
-app.get('/test', (req, res) => {
-    const files = fs.readdirSync(__dirname);
-    res.json({
-        currentDirectory: __dirname,
-        files: files
-    });
-});
-
-// Health check endpoint for Render
+// Health check
 app.get('/health', (req, res) => {
     res.send('OK');
 });
 
-// API endpoint to get all stats
+// API endpoint
 app.get('/api/stats', async (req, res) => {
     try {
-        // Get player details
         const playerResponse = await axios.get(
             `https://open.faceit.com/data/v4/players?nickname=${PLAYER_NAME}`,
             {
@@ -59,7 +38,6 @@ app.get('/api/stats', async (req, res) => {
         const level = games.cs2?.skill_level || 1;
         const elo = games.cs2?.faceit_elo || '-';
 
-        // Get stats
         const statsResponse = await axios.get(
             `https://open.faceit.com/data/v4/players/${playerId}/stats/cs2`,
             {
@@ -69,7 +47,6 @@ app.get('/api/stats', async (req, res) => {
             }
         );
 
-        // Send combined stats
         res.json({
             elo: elo,
             level: level,
@@ -90,5 +67,4 @@ app.get('/api/stats', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    console.log('Directory contents:', fs.readdirSync(__dirname));
 }); 
