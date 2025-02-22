@@ -117,17 +117,32 @@
             10: 'https://support.faceit.com/hc/article_attachments/10525189646876'
         };
 
-        let lastKnownLevel = null;
+        let lastKnownStats = null;
 
         function showStats(stats = null) {
             document.getElementById('loading').style.display = 'none';
             document.getElementById('error').style.display = 'none';
             document.getElementById('stats').style.display = 'block';
 
-            const eloValue = document.querySelector('.stat-value');
+            // If we have new stats, update lastKnownStats
             if (stats) {
-                // Update all stats with real values
-                // Create and add the level icon
+                lastKnownStats = stats;
+            }
+
+            // Use lastKnownStats if available, otherwise show dashes
+            const displayStats = lastKnownStats || {
+                elo: '-',
+                level: null,
+                matches: '-',
+                winRate: '-',
+                avgKD: '-',
+                streak: '-'
+            };
+
+            const eloValue = document.querySelector('.stat-value');
+            
+            // Handle level icon
+            if (displayStats.level) {
                 let levelIcon = document.getElementById('level-icon');
                 if (!levelIcon) {
                     levelIcon = document.createElement('img');
@@ -136,28 +151,20 @@
                     levelIcon.alt = 'FACEIT Level';
                     eloValue.insertBefore(levelIcon, eloValue.firstChild);
                 }
-                levelIcon.src = LEVEL_ICONS[stats.level];
-                
-                // Update stats
-                document.getElementById('elo').textContent = stats.elo;
-                document.getElementById('matches').textContent = stats.matches;
-                document.getElementById('winRate').textContent = stats.winRate + '%';
-                document.getElementById('avgKD').textContent = stats.avgKD;
-                document.getElementById('streak').textContent = stats.streak;
+                levelIcon.src = LEVEL_ICONS[displayStats.level];
             } else {
-                // Remove the level icon completely
                 const levelIcon = document.getElementById('level-icon');
                 if (levelIcon) {
                     levelIcon.remove();
                 }
-                
-                // Show dashes
-                document.getElementById('elo').textContent = '-';
-                document.getElementById('matches').textContent = '-';
-                document.getElementById('winRate').textContent = '-';
-                document.getElementById('avgKD').textContent = '-';
-                document.getElementById('streak').textContent = '-';
             }
+            
+            // Update stats
+            document.getElementById('elo').textContent = displayStats.elo;
+            document.getElementById('matches').textContent = displayStats.matches;
+            document.getElementById('winRate').textContent = displayStats.winRate + (displayStats.winRate !== '-' ? '%' : '');
+            document.getElementById('avgKD').textContent = displayStats.avgKD;
+            document.getElementById('streak').textContent = displayStats.streak;
         }
 
         async function fetchStats() {
@@ -177,7 +184,7 @@
             } catch (err) {
                 console.error('Error fetching stats:', err);
                 
-                // Show dashes instead of hiding the stats
+                // Keep showing last known stats during reconnection
                 showStats(null);
                 
                 // Show error message but keep the stats visible
@@ -187,12 +194,12 @@
             }
         }
 
-        // Show initial dashes
+        // Show initial dashes (no last known stats yet)
         showStats(null);
 
-        // Fetch stats immediately and then every 5 minutes
+        // Fetch stats immediately and then every 1 minute
         fetchStats();
-        setInterval(fetchStats, 5 * 60 * 1000);
+        setInterval(fetchStats, 60 * 1000);
     </script>
 </body>
 </html> 
