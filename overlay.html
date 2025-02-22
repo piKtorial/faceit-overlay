@@ -90,28 +90,9 @@
                 <span class="stat-value" id="streak">-</span>
             </div>
         </div>
-        <div class="stat-row" style="margin-top: 10px;">
-            <span class="stat-label">Uptime</span>
-            <span class="stat-value" id="timer">0s</span>
-        </div>
     </div>
 
     <script>
-        // Timer variables
-        let seconds = 0;
-        setInterval(() => {
-            seconds++;
-            const hours = Math.floor(seconds / 3600);
-            const minutes = Math.floor((seconds % 3600) / 60);
-            const secs = seconds % 60;
-            const timeString = [
-                hours > 0 ? hours + 'h' : '',
-                minutes > 0 ? minutes + 'm' : '',
-                secs + 's'
-            ].filter(Boolean).join(' ');
-            document.getElementById('timer').textContent = timeString;
-        }, 1000);
-
         // Auto-detect if we're running locally or on Render
         const API_BASE = window.location.hostname === 'localhost' 
             ? 'http://localhost:3000' 
