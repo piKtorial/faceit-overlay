@@ -13,8 +13,14 @@ app.use((req, res, next) => {
     next();
 });
 
-// Serve static files
-app.use('/', express.static(path.join(__dirname)));
+// Serve overlay.html at root and /overlay.html
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'overlay.html'));
+});
+
+app.get('/overlay.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'overlay.html'));
+});
 
 // Health check
 app.get('/health', (req, res) => {
@@ -62,6 +68,12 @@ app.get('/api/stats', async (req, res) => {
             details: error.response?.data?.message || error.message
         });
     }
+});
+
+// Log all requests
+app.use((req, res, next) => {
+    console.log(`${req.method} ${req.path}`);
+    next();
 });
 
 const PORT = process.env.PORT || 3000;
