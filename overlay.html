@@ -113,6 +113,39 @@
             10: 'https://support.faceit.com/hc/article_attachments/10525189646876'
         };
 
+        let lastKnownLevel = null;
+
+        function showStats(stats = null) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('stats').style.display = 'block';
+
+            if (stats) {
+                // Update all stats with real values
+                document.getElementById('elo').textContent = stats.elo;
+                lastKnownLevel = stats.level;
+                const levelIcon = document.getElementById('level-icon');
+                levelIcon.src = LEVEL_ICONS[stats.level];
+                levelIcon.style.display = 'inline-block';
+                document.getElementById('matches').textContent = stats.matches;
+                document.getElementById('winRate').textContent = stats.winRate + '%';
+                document.getElementById('avgKD').textContent = stats.avgKD;
+                document.getElementById('streak').textContent = stats.streak;
+            } else {
+                // Show dashes but keep the last known level icon
+                document.getElementById('elo').textContent = '-';
+                const levelIcon = document.getElementById('level-icon');
+                if (lastKnownLevel) {
+                    levelIcon.src = LEVEL_ICONS[lastKnownLevel];
+                    levelIcon.style.display = 'inline-block';
+                }
+                document.getElementById('matches').textContent = '-';
+                document.getElementById('winRate').textContent = '-';
+                document.getElementById('avgKD').textContent = '-';
+                document.getElementById('streak').textContent = '-';
+            }
+        }
+
         async function fetchStats() {
             try {
                 console.log('Starting to fetch stats...');
@@ -125,32 +158,23 @@
                 const stats = await response.json();
                 console.log('Stats Response:', stats);
                 
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('error').style.display = 'none';
-                document.getElementById('stats').style.display = 'block';
-
-                // Update all stats
-                document.getElementById('elo').textContent = stats.elo;
-                const levelIcon = document.getElementById('level-icon');
-                levelIcon.src = LEVEL_ICONS[stats.level];
-                levelIcon.style.display = 'inline-block';
-                document.getElementById('matches').textContent = stats.matches || '-';
-                document.getElementById('winRate').textContent = (stats.winRate || '-') + '%';
-                document.getElementById('avgKD').textContent = stats.avgKD || '-';
-                document.getElementById('streak').textContent = stats.streak || '-';
-
+                showStats(stats);
                 console.log('Stats updated successfully');
             } catch (err) {
                 console.error('Error fetching stats:', err);
                 
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('stats').style.display = 'none';
-                document.getElementById('error').style.display = 'block';
+                // Show dashes instead of hiding the stats
+                showStats(null);
                 
+                // Show error message but keep the stats visible
+                document.getElementById('error').style.display = 'block';
                 document.getElementById('error').textContent = 
-                    `Error: ${err.message}. ${window.location.hostname === 'localhost' ? 'Make sure the server is running (node server.js)' : ''}`;
+                    `Reconnecting... ${window.location.hostname === 'localhost' ? '(Make sure the server is running)' : ''}`;
             }
         }
+
+        // Show initial dashes
+        showStats(null);
 
         // Fetch stats immediately and then every 5 minutes
         fetchStats();
