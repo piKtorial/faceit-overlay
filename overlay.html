@@ -70,7 +70,6 @@
             <div class="stat-row">
                 <span class="stat-label">ELO</span>
                 <span class="stat-value">
-                    <img id="level-icon" class="level-icon" src="" alt="FACEIT Level">
                     <span id="elo">-</span>
                 </span>
             </div>
@@ -120,22 +119,35 @@
             document.getElementById('error').style.display = 'none';
             document.getElementById('stats').style.display = 'block';
 
+            const eloValue = document.querySelector('.stat-value');
             if (stats) {
                 // Update all stats with real values
-                document.getElementById('elo').textContent = stats.elo;
-                lastKnownLevel = stats.level;
-                const levelIcon = document.getElementById('level-icon');
+                // Create and add the level icon
+                let levelIcon = document.getElementById('level-icon');
+                if (!levelIcon) {
+                    levelIcon = document.createElement('img');
+                    levelIcon.id = 'level-icon';
+                    levelIcon.className = 'level-icon';
+                    levelIcon.alt = 'FACEIT Level';
+                    eloValue.insertBefore(levelIcon, eloValue.firstChild);
+                }
                 levelIcon.src = LEVEL_ICONS[stats.level];
-                levelIcon.style.display = 'inline-block';
+                
+                // Update stats
+                document.getElementById('elo').textContent = stats.elo;
                 document.getElementById('matches').textContent = stats.matches;
                 document.getElementById('winRate').textContent = stats.winRate + '%';
                 document.getElementById('avgKD').textContent = stats.avgKD;
                 document.getElementById('streak').textContent = stats.streak;
             } else {
-                // Show dashes and hide the level icon
-                document.getElementById('elo').textContent = '-';
+                // Remove the level icon completely
                 const levelIcon = document.getElementById('level-icon');
-                levelIcon.style.display = 'none';
+                if (levelIcon) {
+                    levelIcon.remove();
+                }
+                
+                // Show dashes
+                document.getElementById('elo').textContent = '-';
                 document.getElementById('matches').textContent = '-';
                 document.getElementById('winRate').textContent = '-';
                 document.getElementById('avgKD').textContent = '-';
