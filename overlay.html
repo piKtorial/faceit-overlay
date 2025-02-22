@@ -98,6 +98,11 @@
             ? 'http://localhost:3000' 
             : window.location.origin;
 
+        // Auto refresh the page every 30 minutes to keep it fresh
+        setInterval(() => {
+            window.location.reload();
+        }, 30 * 60 * 1000);
+
         // FACEIT level icons (simplified versions)
         const LEVEL_ICONS = {
             1: 'https://support.faceit.com/hc/article_attachments/10525200575516',
