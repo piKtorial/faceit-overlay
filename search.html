@@ -78,10 +78,23 @@
             margin-bottom: 20px;
         }
 
+        .avatar-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-right: 15px;
+        }
+
+        .profile-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
         .level-icon {
             width: 50px;
             height: 50px;
-            margin-right: 15px;
         }
 
         .player-info {
@@ -102,7 +115,7 @@
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             gap: 15px;
         }
 
@@ -116,14 +129,17 @@
         .stat-value {
             font-size: 24px;
             font-weight: bold;
-            color: #00ff88;
             margin: 0 0 5px;
         }
+
+        .win { color: #4CAF50; }
+        .loss { color: #f44336; }
 
         .stat-label {
             font-size: 14px;
             color: #aaa;
             margin: 0;
+            text-transform: uppercase;
         }
 
         .error-message {
@@ -297,7 +313,10 @@
         
         <div class="stats-container" id="stats-container">
             <div class="stats-header">
-                <img id="level-icon" class="level-icon" src="" alt="Level">
+                <div class="avatar-container">
+                    <img id="profile-avatar" class="profile-avatar" src="" alt="Avatar">
+                    <img id="level-icon" class="level-icon" src="" alt="Level">
+                </div>
                 <div class="player-info">
                     <h2 class="player-name" id="player-name"></h2>
                     <p class="player-elo">ELO: <span id="elo"></span></p>
@@ -306,20 +325,30 @@
             
             <div class="stats-grid">
                 <div class="stat-card">
-                    <p class="stat-value" id="matches"></p>
+                    <p class="stat-value" id="matches">-</p>
                     <p class="stat-label">Matches</p>
                 </div>
                 <div class="stat-card">
-                    <p class="stat-value" id="winRate"></p>
-                    <p class="stat-label">Win Rate</p>
+                    <p class="stat-value">
+                        <span class="win" id="todayWins">-</span>:<span class="loss" id="todayLosses">-</span>
+                    </p>
+                    <p class="stat-label">Today's W/L</p>
                 </div>
                 <div class="stat-card">
-                    <p class="stat-value" id="avgKD"></p>
+                    <p class="stat-value" id="avgKD">-</p>
                     <p class="stat-label">Avg K/D</p>
                 </div>
                 <div class="stat-card">
-                    <p class="stat-value" id="streak"></p>
+                    <p class="stat-value" id="avgKills">-</p>
+                    <p class="stat-label">Avg Kills</p>
+                </div>
+                <div class="stat-card">
+                    <p class="stat-value" id="streak">-</p>
                     <p class="stat-label">Win Streak</p>
+                </div>
+                <div class="stat-card">
+                    <p class="stat-value" id="avgADR">-</p>
+                    <p class="stat-label">Avg ADR</p>
                 </div>
             </div>
             
@@ -397,6 +426,7 @@
                 if (!response.ok) throw new Error('Failed to fetch suggestions');
                 
                 const data = await response.json();
+                console.log('Search suggestions data:', data);
                 displaySuggestions(data.result);
             } catch (error) {
                 console.error('Error fetching suggestions:', error);
@@ -415,6 +445,7 @@
             suggestionsContainer.appendChild(loadingDiv);
             
             if (suggestions.length > 0) {
+                console.log('First suggestion data:', suggestions[0]);
                 suggestions.forEach(player => {
                     const div = document.createElement('div');
                     div.className = 'suggestion-item';
@@ -468,8 +499,9 @@
                     throw new Error(errorData.details || 'Failed to fetch stats');
                 }
 
-                const stats = await response.json();
-                displayStats(stats);
+                const data = await response.json();
+                console.log('Stats data:', data);
+                displayStats(data);
                 
                 // Update overlay links
                 const overlay1Link = document.getElementById('overlay1-link');
@@ -485,16 +517,23 @@
             }
         }
 
-        function displayStats(stats) {
-            document.getElementById('player-name').textContent = stats.username;
-            document.getElementById('elo').textContent = stats.elo;
-            document.getElementById('matches').textContent = stats.matches;
-            document.getElementById('winRate').textContent = stats.winRate + '%';
-            document.getElementById('avgKD').textContent = stats.avgKD;
-            document.getElementById('streak').textContent = stats.streak;
+        function displayStats(data) {
+            console.log('Displaying stats with data:', data);
+            document.getElementById('player-name').textContent = data.username;
+            document.getElementById('elo').textContent = data.elo;
+            document.getElementById('matches').textContent = data.matches;
+            document.getElementById('todayWins').textContent = data.todayWins;
+            document.getElementById('todayLosses').textContent = data.todayLosses;
+            document.getElementById('avgKD').textContent = data.avgKD;
+            document.getElementById('avgKills').textContent = data.avgKills || '-';
+            document.getElementById('streak').textContent = data.streak;
+            document.getElementById('avgADR').textContent = data.avgADR || '-';
             
-            // Set level icon using the one from the API response
-            document.getElementById('level-icon').src = stats.levelImg;
+            // Set level icon and avatar
+            document.getElementById('level-icon').src = data.levelImg;
+            const avatarUrl = data.avatar || data.avatarUrl;
+            console.log('Setting avatar URL:', avatarUrl);
+            document.getElementById('profile-avatar').src = avatarUrl || 'https://assets.faceit-cdn.net/avatars/default_avatar.jpg';
             
             // Show stats container
             document.getElementById('stats-container').style.display = 'block';
