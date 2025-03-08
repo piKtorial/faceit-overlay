@@ -132,6 +132,19 @@ app.get('/api/stats', async (req, res) => {
         const level = cs2Data ? parseInt(cs2Data.skill_level) : 1;
         const elo = cs2Data ? cs2Data.faceit_elo : '-';
 
+        const LEVEL_ICONS = {
+            1: 'https://support.faceit.com/hc/article_attachments/10525200575516',
+            2: 'https://support.faceit.com/hc/article_attachments/10525189649308',
+            3: 'https://support.faceit.com/hc/article_attachments/10525200576796',
+            4: 'https://support.faceit.com/hc/article_attachments/10525185037724',
+            5: 'https://support.faceit.com/hc/article_attachments/10525215800860',
+            6: 'https://support.faceit.com/hc/article_attachments/10525245409692',
+            7: 'https://support.faceit.com/hc/article_attachments/10525185034012',
+            8: 'https://support.faceit.com/hc/article_attachments/10525189648796',
+            9: 'https://support.faceit.com/hc/article_attachments/10525200576028',
+            10: 'https://support.faceit.com/hc/article_attachments/10525189646876'
+        };
+
         const statsResponse = await axios.get(
             `https://open.faceit.com/data/v4/players/${playerId}/stats/cs2`,
             {
@@ -141,7 +154,10 @@ app.get('/api/stats', async (req, res) => {
             }
         );
 
-        // Get last 30 matches
+        // Get total matches from lifetime stats
+        const totalMatches = statsResponse.data.lifetime ? parseInt(statsResponse.data.lifetime.Matches) : 0;
+
+        // Get last 30 matches for calculating recent stats
         const matchHistoryResponse = await axios.get(
             `https://open.faceit.com/data/v4/players/${playerId}/games/cs2/stats?offset=0&limit=30`,
             {
@@ -236,9 +252,9 @@ app.get('/api/stats', async (req, res) => {
             username: playerResponse.data.nickname,
             avatar: playerResponse.data.avatar,
             level,
-            levelImg: `https://cdn.faceit.com/frontend/291/assets/images/skill-icons/skill_level_${level}_svg.svg`,
+            levelImg: LEVEL_ICONS[level],
             elo,
-            matches: matches.length,
+            matches: totalMatches,
             todayWins: sessionWins,
             todayLosses: sessionLosses,
             avgKD,
@@ -271,6 +287,19 @@ app.get('/api/search-users', async (req, res) => {
             return res.json({ result: cachedData });
         }
 
+        const LEVEL_ICONS = {
+            1: 'https://support.faceit.com/hc/article_attachments/10525200575516',
+            2: 'https://support.faceit.com/hc/article_attachments/10525189649308',
+            3: 'https://support.faceit.com/hc/article_attachments/10525200576796',
+            4: 'https://support.faceit.com/hc/article_attachments/10525185037724',
+            5: 'https://support.faceit.com/hc/article_attachments/10525215800860',
+            6: 'https://support.faceit.com/hc/article_attachments/10525245409692',
+            7: 'https://support.faceit.com/hc/article_attachments/10525185034012',
+            8: 'https://support.faceit.com/hc/article_attachments/10525189648796',
+            9: 'https://support.faceit.com/hc/article_attachments/10525200576028',
+            10: 'https://support.faceit.com/hc/article_attachments/10525189646876'
+        };
+
         const response = await axios.get(
             `https://open.faceit.com/data/v4/search/players?nickname=${query}&offset=0&limit=5&game=cs2`,
             {
@@ -280,14 +309,32 @@ app.get('/api/search-users', async (req, res) => {
             }
         );
 
-        const players = response.data.items.map(player => ({
-            nickname: player.nickname,
-            avatar: player.avatar,
-            level: player.games.cs2 ? player.games.cs2.skill_level : 1,
-            levelImg: `https://cdn.faceit.com/frontend/291/assets/images/skill-icons/skill_level_${player.games.cs2 ? player.games.cs2.skill_level : 1}_svg.svg`,
-            elo: player.games.cs2 ? player.games.cs2.faceit_elo : '-'
-        }));
+        // Get detailed player data for each search result to get ELO
+        const playerPromises = response.data.items.map(async player => {
+            const playerResponse = await axios.get(
+                `https://open.faceit.com/data/v4/players/${player.player_id}`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${FACEIT_API_KEY}`
+                    }
+                }
+            );
 
+            const cs2Game = player.games.find(game => game.name === 'cs2');
+            const level = cs2Game ? parseInt(cs2Game.skill_level) : 1;
+            const cs2Data = playerResponse.data.games.cs2;
+            const elo = cs2Data ? cs2Data.faceit_elo : '-';
+            
+            return {
+                nickname: player.nickname,
+                avatar: player.avatar,
+                level: level,
+                levelImg: LEVEL_ICONS[level],
+                elo: elo
+            };
+        });
+
+        const players = await Promise.all(playerPromises);
         cache.set(cacheKey, players);
         res.json({ result: players });
 
