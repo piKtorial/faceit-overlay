@@ -90,9 +90,9 @@ app.get('/api/stats', async (req, res) => {
         );
 
         const playerId = playerResponse.data.player_id;
-        const games = playerResponse.data.games;
-        const level = games.cs2?.skill_level || 1;
-        const elo = games.cs2?.faceit_elo || '-';
+        const cs2Data = playerResponse.data.games.cs2;
+        const level = cs2Data ? parseInt(cs2Data.skill_level) : 1;
+        const elo = cs2Data ? cs2Data.faceit_elo : '-';
 
         const statsResponse = await axios.get(
             `https://open.faceit.com/data/v4/players/${playerId}/stats/cs2`,
@@ -103,10 +103,25 @@ app.get('/api/stats', async (req, res) => {
             }
         );
 
+        // Use the same level icons as defined in the frontend
+        const levelIcons = {
+            1: 'https://support.faceit.com/hc/article_attachments/10525200575516',
+            2: 'https://support.faceit.com/hc/article_attachments/10525189649308',
+            3: 'https://support.faceit.com/hc/article_attachments/10525200576796',
+            4: 'https://support.faceit.com/hc/article_attachments/10525185037724',
+            5: 'https://support.faceit.com/hc/article_attachments/10525215800860',
+            6: 'https://support.faceit.com/hc/article_attachments/10525245409692',
+            7: 'https://support.faceit.com/hc/article_attachments/10525185034012',
+            8: 'https://support.faceit.com/hc/article_attachments/10525189648796',
+            9: 'https://support.faceit.com/hc/article_attachments/10525200576028',
+            10: 'https://support.faceit.com/hc/article_attachments/10525189646876'
+        };
+
         res.json({
             username: username,
             elo: elo,
             level: level,
+            levelImg: levelIcons[level] || levelIcons[1],
             matches: statsResponse.data.lifetime.Matches,
             winRate: statsResponse.data.lifetime['Win Rate %'],
             avgKD: statsResponse.data.lifetime['Average K/D Ratio'],
@@ -116,6 +131,101 @@ app.get('/api/stats', async (req, res) => {
         console.error('API Error:', error.response?.data || error.message);
         res.status(500).json({
             error: 'Failed to fetch FACEIT stats',
+            details: error.response?.data?.message || error.message
+        });
+    }
+});
+
+// Search users endpoint
+app.get('/api/search-users', async (req, res) => {
+    try {
+        const query = req.query.q;
+        if (!query || query.length < 2) {
+            return res.json({ result: [] });
+        }
+
+        const searchResponse = await axios.get(
+            `https://open.faceit.com/data/v4/search/players?nickname=${query}&offset=0&limit=5`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${FACEIT_API_KEY}`
+                }
+            }
+        );
+
+        // Get detailed player info for each result
+        const playerPromises = searchResponse.data.items.map(async player => {
+            try {
+                const playerResponse = await axios.get(
+                    `https://open.faceit.com/data/v4/players/${player.player_id}`,
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${FACEIT_API_KEY}`
+                        }
+                    }
+                );
+                
+                const cs2Data = playerResponse.data.games.cs2;
+                const level = cs2Data ? parseInt(cs2Data.skill_level) : 1;
+                const elo = cs2Data ? cs2Data.faceit_elo : '-';
+                
+                // Use the same level icons as defined in the frontend
+                const levelIcons = {
+                    1: 'https://support.faceit.com/hc/article_attachments/10525200575516',
+                    2: 'https://support.faceit.com/hc/article_attachments/10525189649308',
+                    3: 'https://support.faceit.com/hc/article_attachments/10525200576796',
+                    4: 'https://support.faceit.com/hc/article_attachments/10525185037724',
+                    5: 'https://support.faceit.com/hc/article_attachments/10525215800860',
+                    6: 'https://support.faceit.com/hc/article_attachments/10525245409692',
+                    7: 'https://support.faceit.com/hc/article_attachments/10525185034012',
+                    8: 'https://support.faceit.com/hc/article_attachments/10525189648796',
+                    9: 'https://support.faceit.com/hc/article_attachments/10525200576028',
+                    10: 'https://support.faceit.com/hc/article_attachments/10525189646876'
+                };
+                
+                return {
+                    nickname: player.nickname,
+                    level: level,
+                    levelImg: levelIcons[level] || levelIcons[1],
+                    elo: elo,
+                    avatar: player.avatar || ''
+                };
+            } catch (error) {
+                console.error(`Error fetching player ${player.player_id}:`, error.message);
+                return {
+                    nickname: player.nickname,
+                    level: 1,
+                    levelImg: 'https://support.faceit.com/hc/article_attachments/10525200575516',
+                    elo: '-',
+                    avatar: player.avatar || ''
+                };
+            }
+        });
+
+        const suggestions = await Promise.all(playerPromises);
+
+        // Sort results to prioritize exact matches while preserving case
+        suggestions.sort((a, b) => {
+            const aStartsWithQuery = a.nickname.toLowerCase().startsWith(query.toLowerCase());
+            const bStartsWithQuery = b.nickname.toLowerCase().startsWith(query.toLowerCase());
+            
+            if (aStartsWithQuery && !bStartsWithQuery) return -1;
+            if (!aStartsWithQuery && bStartsWithQuery) return 1;
+            
+            const aExactMatch = a.nickname.toLowerCase() === query.toLowerCase();
+            const bExactMatch = b.nickname.toLowerCase() === query.toLowerCase();
+            
+            if (aExactMatch && !bExactMatch) return -1;
+            if (!aExactMatch && bExactMatch) return 1;
+            
+            return a.nickname.localeCompare(b.nickname);
+        });
+
+        res.json({ result: suggestions });
+    } catch (error) {
+        console.error('Search API Error:', error.response?.data || error.message);
+        res.status(500).json({
+            error: 'Failed to fetch player suggestions',
             details: error.response?.data?.message || error.message
         });
     }
