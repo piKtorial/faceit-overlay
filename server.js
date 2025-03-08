@@ -153,12 +153,12 @@ app.get('/api/stats', async (req, res) => {
         let totalADR = 0;
         const matches = matchHistoryResponse.data.items || [];
         for (const match of matches) {
-            console.log(`Match ${match.matchId} stats:`, match.stats);
+            console.log(`Match ${match.matchId || match.stats['Match Id']} stats:`, match.stats);
             const kills = parseInt(match.stats.Kills || 0);
             const adr = parseFloat(match.stats.ADR || 0);
             totalKills += kills;
             totalADR += adr;
-            console.log(`Match ${match.matchId}: ${kills} kills, total now: ${totalKills}`);
+            console.log(`Match ${match.matchId || match.stats['Match Id']}: ${kills} kills, total now: ${totalKills}`);
         }
 
         const avgKills = matches.length > 0 ? (totalKills / matches.length).toFixed(1) : '0';
@@ -166,17 +166,108 @@ app.get('/api/stats', async (req, res) => {
         console.log('Final average kills:', avgKills);
         console.log('Final average ADR:', avgADR);
 
-        // Calculate today's win/loss from match stats
-        const today = new Date().setHours(0, 0, 0, 0);
-        const todayMatches = matches.filter(match => {
-            const matchDate = new Date(parseInt(match.stats['Match Finished At'])).setHours(0, 0, 0, 0);
-            return matchDate === today;
+        // Calculate session win/loss from match stats
+        const SESSION_WINDOW = 6 * 60 * 60; // 6 hours in seconds
+        
+        // Get 24 hours ago instead of today's midnight
+        const twentyFourHoursAgo = new Date();
+        twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+        console.log('\n=== Session Tracking Debug ===');
+        console.log('24 hours ago:', twentyFourHoursAgo.toISOString());
+        
+        // Filter matches from last 24 hours
+        console.log('\nFiltering matches from last 24 hours:');
+        const recentMatches = matches.filter(match => {
+            const matchTimestamp = parseInt(match.stats['Match Finished At']) / 1000;
+            const matchDate = new Date(matchTimestamp * 1000);
+            const isRecent = matchDate >= twentyFourHoursAgo;
+            console.log(`Match ${match.matchId || match.stats['Match Id']}: ${matchDate.toISOString()} - isRecent: ${isRecent}`);
+            return isRecent;
         });
 
-        const todayWins = todayMatches.filter(match => match.stats.Result === '1').length;
-        const todayLosses = todayMatches.filter(match => match.stats.Result === '0').length;
+        console.log(`\nFound ${recentMatches.length} matches in last 24 hours`);
 
-        console.log(`Today's matches: ${todayMatches.length}, Wins: ${todayWins}, Losses: ${todayLosses}`);
+        // Sort matches by timestamp (oldest to newest)
+        recentMatches.sort((a, b) => {
+            return parseInt(a.stats['Match Finished At']) - parseInt(b.stats['Match Finished At']);
+        });
+
+        console.log('\nMatches in chronological order:');
+        recentMatches.forEach(match => {
+            const matchTime = new Date(parseInt(match.stats['Match Finished At']) * 1000);
+            console.log(`Match ${match.matchId || match.stats['Match Id']}: ${matchTime.toISOString()}`);
+        });
+
+        // Find the longest chain of matches within 6 hours of each other
+        let longestChain = [];
+        let currentChain = [];
+        let lastMatchTimestamp = null;
+
+        console.log('\nFinding longest chain of matches:');
+        for (const match of recentMatches) {
+            const matchTimestamp = parseInt(match.stats['Match Finished At']) / 1000;
+            const matchTime = new Date(matchTimestamp * 1000);
+            
+            if (lastMatchTimestamp === null) {
+                currentChain = [match];
+                lastMatchTimestamp = matchTimestamp;
+                console.log(`Starting new chain with match ${match.matchId || match.stats['Match Id']} (${matchTime.toISOString()})`);
+            } else {
+                const timeDiffHours = (matchTimestamp - lastMatchTimestamp) / 3600;
+                console.log(`\nChecking match ${match.matchId || match.stats['Match Id']}:`);
+                console.log(`Time: ${matchTime.toISOString()}`);
+                console.log(`Time since last match: ${timeDiffHours.toFixed(2)} hours`);
+                
+                if (timeDiffHours < 6) {
+                    currentChain.push(match);
+                    lastMatchTimestamp = matchTimestamp;
+                    console.log('Added to current chain (within 6 hours of previous match)');
+                } else {
+                    console.log('Gap larger than 6 hours, starting new chain');
+                    // If this chain is longer than our longest, save it
+                    if (currentChain.length > longestChain.length) {
+                        console.log(`New longest chain found: ${currentChain.length} matches`);
+                        longestChain = [...currentChain];
+                    }
+                    // Start new chain with current match
+                    currentChain = [match];
+                    lastMatchTimestamp = matchTimestamp;
+                }
+            }
+        }
+
+        // Check if the last chain is the longest
+        if (currentChain.length > longestChain.length) {
+            console.log(`Final chain is longest: ${currentChain.length} matches`);
+            longestChain = [...currentChain];
+        }
+
+        // Use the longest chain as our session
+        const sessionMatches = longestChain;
+
+        console.log('\nFinal session matches:');
+        sessionMatches.forEach(match => {
+            const matchTimestamp = parseInt(match.stats['Match Finished At']) / 1000;
+            const matchTime = new Date(matchTimestamp * 1000);
+            console.log(`Match ${match.matchId || match.stats['Match Id']}: ${matchTime.toISOString()}, Result: ${match.stats.Result === '1' ? 'Win' : 'Loss'}`);
+        });
+
+        const sessionWins = sessionMatches.filter(match => match.stats.Result === '1').length;
+        const sessionLosses = sessionMatches.filter(match => match.stats.Result === '0').length;
+
+        console.log(`\nFinal counts - Recent matches: ${recentMatches.length}, Session matches: ${sessionMatches.length}`);
+        console.log(`Session W/L: ${sessionWins}:${sessionLosses}`);
+        console.log('=== End Session Tracking Debug ===\n');
+
+        // Calculate win streak
+        let streak = 0;
+        for (const match of matches) {
+            if (match.stats.Result === '1') {
+                streak++;
+            } else {
+                break;
+            }
+        }
 
         // Use the same level icons as defined in the frontend
         const levelIcons = {
@@ -197,13 +288,14 @@ app.get('/api/stats', async (req, res) => {
             elo: elo,
             level: level,
             levelImg: levelIcons[level] || levelIcons[1],
+            avatar: playerResponse.data.avatar,
             matches: statsResponse.data.lifetime.Matches,
-            todayWins: todayWins,
-            todayLosses: todayLosses,
+            todayWins: sessionWins,      // Use session stats for W/L
+            todayLosses: sessionLosses,  // Use session stats for W/L
             avgKD: statsResponse.data.lifetime['Average K/D Ratio'],
             avgKills: avgKills,
             avgADR: avgADR,
-            streak: statsResponse.data.lifetime['Current Win Streak']
+            streak: streak
         };
 
         // Cache the response
