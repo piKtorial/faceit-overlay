@@ -168,6 +168,18 @@
             z-index: 1000;
         }
 
+        .suggestions-loading {
+            padding: 20px;
+            text-align: center;
+            display: none;
+        }
+
+        .suggestions-loading .spinner {
+            width: 20px;
+            height: 20px;
+            margin: 0 auto 10px;
+        }
+
         .suggestion-item {
             padding: 12px 15px;
             display: flex;
@@ -225,6 +237,38 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        .overlay-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .overlay-button {
+            padding: 12px 25px;
+            background-color: #333;
+            color: white;
+            border: 2px solid #ff5500;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .overlay-button:hover {
+            background-color: #ff5500;
+        }
+
+        .overlay-button svg {
+            width: 20px;
+            height: 20px;
+        }
     </style>
 </head>
 <body>
@@ -234,7 +278,12 @@
         <div class="search-form">
             <div class="search-wrapper">
                 <input type="text" id="username" placeholder="Enter FACEIT username" required>
-                <div class="suggestions" id="suggestions"></div>
+                <div class="suggestions" id="suggestions">
+                    <div class="suggestions-loading" id="suggestions-loading">
+                        <div class="spinner"></div>
+                        <p>Loading suggestions...</p>
+                    </div>
+                </div>
             </div>
             <button id="search-btn">Search</button>
         </div>
@@ -274,8 +323,21 @@
                 </div>
             </div>
             
-            <div class="overlay-link">
-                <a id="overlay-link" href="#" target="_blank">Open as Overlay</a>
+            <div class="overlay-buttons" id="overlay-buttons" style="display: none;">
+                <a href="#" class="overlay-button" id="overlay1-link" target="_blank">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 8v8m-4-4h8"/>
+                    </svg>
+                    Circular Overlay
+                </a>
+                <a href="#" class="overlay-button" id="overlay2-link" target="_blank">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <path d="M12 8v8m-4-4h8"/>
+                    </svg>
+                    Rectangular Overlay
+                </a>
             </div>
         </div>
     </div>
@@ -325,6 +387,12 @@
 
         async function fetchSuggestions(query) {
             try {
+                // Show loading spinner
+                const suggestionsLoading = document.getElementById('suggestions-loading');
+                const suggestionsContainer = document.getElementById('suggestions');
+                suggestionsContainer.style.display = 'block';
+                suggestionsLoading.style.display = 'block';
+
                 const response = await fetch(`${API_BASE}/api/search-users?q=${encodeURIComponent(query)}`);
                 if (!response.ok) throw new Error('Failed to fetch suggestions');
                 
@@ -332,12 +400,19 @@
                 displaySuggestions(data.result);
             } catch (error) {
                 console.error('Error fetching suggestions:', error);
+                suggestionsContainer.style.display = 'none';
+            } finally {
+                // Hide loading spinner
+                document.getElementById('suggestions-loading').style.display = 'none';
             }
         }
 
         function displaySuggestions(suggestions) {
             const suggestionsContainer = document.getElementById('suggestions');
+            // Clear previous suggestions but keep the loading div
+            const loadingDiv = document.getElementById('suggestions-loading');
             suggestionsContainer.innerHTML = '';
+            suggestionsContainer.appendChild(loadingDiv);
             
             if (suggestions.length > 0) {
                 suggestions.forEach(player => {
@@ -396,9 +471,12 @@
                 const stats = await response.json();
                 displayStats(stats);
                 
-                // Update overlay link
-                const overlayLink = document.getElementById('overlay-link');
-                overlayLink.href = `${API_BASE}/overlay.html?username=${encodeURIComponent(username)}`;
+                // Update overlay links
+                const overlay1Link = document.getElementById('overlay1-link');
+                const overlay2Link = document.getElementById('overlay2-link');
+                overlay1Link.href = `overlay.html?username=${encodeURIComponent(username)}`;
+                overlay2Link.href = `overlay2.html?username=${encodeURIComponent(username)}`;
+                document.getElementById('overlay-buttons').style.display = 'flex';
                 
             } catch (error) {
                 showError(error.message || 'An error occurred while fetching stats');

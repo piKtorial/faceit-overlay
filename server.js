@@ -2,7 +2,22 @@ const express = require('express');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
+const rateLimit = require('express-rate-limit');
+const NodeCache = require('node-cache');
 const app = express();
+
+// Initialize cache with 5 minute TTL
+const cache = new NodeCache({ stdTTL: 300 });
+
+// Rate limiting configuration
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per windowMs
+    message: 'Too many requests from this IP, please try again later.'
+});
+
+// Apply rate limiting to all routes
+app.use(limiter);
 
 // Log all requests at the very start
 app.use((req, res, next) => {
@@ -58,6 +73,17 @@ app.get('/overlay.html', (req, res) => {
     }
 });
 
+app.get('/overlay2.html', (req, res) => {
+    const filePath = path.join(__dirname, 'overlay2.html');
+    console.log('Attempting to serve:', filePath);
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        console.error('File not found:', filePath);
+        res.status(404).send('overlay2.html not found');
+    }
+});
+
 app.get('/search.html', (req, res) => {
     const filePath = path.join(__dirname, 'search.html');
     console.log('Attempting to serve:', filePath);
@@ -77,9 +103,15 @@ app.get('/health', (req, res) => {
 // API endpoint
 app.get('/api/stats', async (req, res) => {
     try {
-        // Get username from query parameter or use default
         const username = req.query.username || PLAYER_NAME;
         
+        // Check cache first
+        const cacheKey = `stats_${username}`;
+        const cachedData = cache.get(cacheKey);
+        if (cachedData) {
+            return res.json(cachedData);
+        }
+
         const playerResponse = await axios.get(
             `https://open.faceit.com/data/v4/players?nickname=${username}`,
             {
@@ -103,6 +135,49 @@ app.get('/api/stats', async (req, res) => {
             }
         );
 
+        console.log('Player lifetime stats:', statsResponse.data.lifetime);
+
+        // Get last 30 matches
+        const matchHistoryResponse = await axios.get(
+            `https://open.faceit.com/data/v4/players/${playerId}/games/cs2/stats?offset=0&limit=30`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${FACEIT_API_KEY}`
+                }
+            }
+        );
+
+        console.log('Number of matches found:', matchHistoryResponse.data.items.length);
+        
+        let totalKills = 0;
+        let totalADR = 0;
+        const matches = matchHistoryResponse.data.items || [];
+        for (const match of matches) {
+            console.log(`Match ${match.matchId} stats:`, match.stats);
+            const kills = parseInt(match.stats.Kills || 0);
+            const adr = parseFloat(match.stats.ADR || 0);
+            totalKills += kills;
+            totalADR += adr;
+            console.log(`Match ${match.matchId}: ${kills} kills, total now: ${totalKills}`);
+        }
+
+        const avgKills = matches.length > 0 ? (totalKills / matches.length).toFixed(1) : '0';
+        const avgADR = matches.length > 0 ? (totalADR / matches.length).toFixed(1) : '0';
+        console.log('Final average kills:', avgKills);
+        console.log('Final average ADR:', avgADR);
+
+        // Calculate today's win/loss from match stats
+        const today = new Date().setHours(0, 0, 0, 0);
+        const todayMatches = matches.filter(match => {
+            const matchDate = new Date(parseInt(match.stats['Match Finished At'])).setHours(0, 0, 0, 0);
+            return matchDate === today;
+        });
+
+        const todayWins = todayMatches.filter(match => match.stats.Result === '1').length;
+        const todayLosses = todayMatches.filter(match => match.stats.Result === '0').length;
+
+        console.log(`Today's matches: ${todayMatches.length}, Wins: ${todayWins}, Losses: ${todayLosses}`);
+
         // Use the same level icons as defined in the frontend
         const levelIcons = {
             1: 'https://support.faceit.com/hc/article_attachments/10525200575516',
@@ -117,16 +192,24 @@ app.get('/api/stats', async (req, res) => {
             10: 'https://support.faceit.com/hc/article_attachments/10525189646876'
         };
 
-        res.json({
+        const responseData = {
             username: username,
             elo: elo,
             level: level,
             levelImg: levelIcons[level] || levelIcons[1],
             matches: statsResponse.data.lifetime.Matches,
-            winRate: statsResponse.data.lifetime['Win Rate %'],
+            todayWins: todayWins,
+            todayLosses: todayLosses,
             avgKD: statsResponse.data.lifetime['Average K/D Ratio'],
+            avgKills: avgKills,
+            avgADR: avgADR,
             streak: statsResponse.data.lifetime['Current Win Streak']
-        });
+        };
+
+        // Cache the response
+        cache.set(cacheKey, responseData);
+
+        res.json(responseData);
     } catch (error) {
         console.error('API Error:', error.response?.data || error.message);
         res.status(500).json({
@@ -144,6 +227,13 @@ app.get('/api/search-users', async (req, res) => {
             return res.json({ result: [] });
         }
 
+        // Check cache first
+        const cacheKey = `search_${query}`;
+        const cachedData = cache.get(cacheKey);
+        if (cachedData) {
+            return res.json({ result: cachedData });
+        }
+
         const searchResponse = await axios.get(
             `https://open.faceit.com/data/v4/search/players?nickname=${query}&offset=0&limit=5`,
             {
@@ -155,6 +245,13 @@ app.get('/api/search-users', async (req, res) => {
 
         // Get detailed player info for each result
         const playerPromises = searchResponse.data.items.map(async player => {
+            // Check player cache first
+            const playerCacheKey = `player_${player.player_id}`;
+            const cachedPlayer = cache.get(playerCacheKey);
+            if (cachedPlayer) {
+                return cachedPlayer;
+            }
+
             try {
                 const playerResponse = await axios.get(
                     `https://open.faceit.com/data/v4/players/${player.player_id}`,
@@ -183,13 +280,17 @@ app.get('/api/search-users', async (req, res) => {
                     10: 'https://support.faceit.com/hc/article_attachments/10525189646876'
                 };
                 
-                return {
+                const playerData = {
                     nickname: player.nickname,
                     level: level,
                     levelImg: levelIcons[level] || levelIcons[1],
                     elo: elo,
                     avatar: player.avatar || ''
                 };
+
+                // Cache individual player data
+                cache.set(playerCacheKey, playerData);
+                return playerData;
             } catch (error) {
                 console.error(`Error fetching player ${player.player_id}:`, error.message);
                 return {
@@ -220,6 +321,9 @@ app.get('/api/search-users', async (req, res) => {
             
             return a.nickname.localeCompare(b.nickname);
         });
+
+        // Cache the search results
+        cache.set(cacheKey, suggestions);
 
         res.json({ result: suggestions });
     } catch (error) {
