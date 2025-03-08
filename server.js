@@ -26,13 +26,13 @@ console.log('Files in directory:', fs.readdirSync(__dirname));
 
 // Serve overlay.html at root and /overlay.html
 app.get('/', (req, res) => {
-    const filePath = path.join(__dirname, 'overlay.html');
+    const filePath = path.join(__dirname, 'search.html');
     console.log('Attempting to serve:', filePath);
     if (fs.existsSync(filePath)) {
         res.sendFile(filePath);
     } else {
         console.error('File not found:', filePath);
-        res.status(404).send('overlay.html not found');
+        res.status(404).send('search.html not found');
     }
 });
 
@@ -58,6 +58,17 @@ app.get('/overlay.html', (req, res) => {
     }
 });
 
+app.get('/search.html', (req, res) => {
+    const filePath = path.join(__dirname, 'search.html');
+    console.log('Attempting to serve:', filePath);
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        console.error('File not found:', filePath);
+        res.status(404).send('search.html not found');
+    }
+});
+
 // Health check
 app.get('/health', (req, res) => {
     res.send('OK');
@@ -66,8 +77,11 @@ app.get('/health', (req, res) => {
 // API endpoint
 app.get('/api/stats', async (req, res) => {
     try {
+        // Get username from query parameter or use default
+        const username = req.query.username || PLAYER_NAME;
+        
         const playerResponse = await axios.get(
-            `https://open.faceit.com/data/v4/players?nickname=${PLAYER_NAME}`,
+            `https://open.faceit.com/data/v4/players?nickname=${username}`,
             {
                 headers: {
                     'Authorization': `Bearer ${FACEIT_API_KEY}`
@@ -90,6 +104,7 @@ app.get('/api/stats', async (req, res) => {
         );
 
         res.json({
+            username: username,
             elo: elo,
             level: level,
             matches: statsResponse.data.lifetime.Matches,
@@ -118,7 +133,7 @@ app.use((req, res) => {
     res.status(404).send('Not found');
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 }); 

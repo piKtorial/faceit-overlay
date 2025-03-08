@@ -127,8 +127,14 @@
     <script>
         // Auto-detect if we're running locally or on Render
         const API_BASE = window.location.hostname === 'localhost' 
-            ? 'http://localhost:3000' 
+            ? 'http://localhost:3001' 
             : window.location.origin;
+
+        // Get username from URL query parameter
+        function getUsername() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('username') || null; // Return null if no username is provided
+        }
 
         // Auto refresh the page every 30 minutes to keep it fresh
         setInterval(() => {
@@ -203,7 +209,13 @@
             try {
                 console.log('Starting to fetch stats...');
                 
-                const response = await fetch(`${API_BASE}/api/stats`);
+                // Get username from URL or use default
+                const username = getUsername();
+                const apiUrl = username 
+                    ? `${API_BASE}/api/stats?username=${encodeURIComponent(username)}`
+                    : `${API_BASE}/api/stats`;
+                
+                const response = await fetch(apiUrl);
                 if (!response.ok) {
                     throw new Error(`API Error: ${response.status}`);
                 }
