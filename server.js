@@ -180,58 +180,19 @@ app.get('/api/stats', async (req, res) => {
         const avgKills = matches.length > 0 ? (totalKills / matches.length).toFixed(1) : '0';
         const avgADR = matches.length > 0 ? (totalADR / matches.length).toFixed(1) : '0';
 
-        // Calculate session win/loss from match stats
+        // Calculate today's win/loss from match stats
         const twentyFourHoursAgo = new Date();
         twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
         
-        // Filter matches from last 24 hours
-        const recentMatches = matches.filter(match => {
-            const matchTimestamp = parseInt(match.stats['Match Finished At']) / 1000;
-            const matchDate = new Date(matchTimestamp * 1000);
+        // Filter matches from last 24 hours and calculate W/L
+        const todayMatches = matches.filter(match => {
+            const matchTimestamp = parseInt(match.stats['Match Finished At']) * 1000; // Convert to milliseconds
+            const matchDate = new Date(matchTimestamp);
             return matchDate >= twentyFourHoursAgo;
         });
 
-        // Sort matches by timestamp (oldest to newest)
-        recentMatches.sort((a, b) => {
-            return parseInt(a.stats['Match Finished At']) - parseInt(b.stats['Match Finished At']);
-        });
-
-        // Find the longest chain of matches within 6 hours of each other
-        let longestChain = [];
-        let currentChain = [];
-        let lastMatchTimestamp = null;
-
-        for (const match of recentMatches) {
-            const matchTimestamp = parseInt(match.stats['Match Finished At']) / 1000;
-            
-            if (lastMatchTimestamp === null) {
-                currentChain = [match];
-                lastMatchTimestamp = matchTimestamp;
-            } else {
-                const timeDiffHours = (matchTimestamp - lastMatchTimestamp) / 3600;
-                
-                if (timeDiffHours < 6) {
-                    currentChain.push(match);
-                    lastMatchTimestamp = matchTimestamp;
-                } else {
-                    if (currentChain.length > longestChain.length) {
-                        longestChain = [...currentChain];
-                    }
-                    currentChain = [match];
-                    lastMatchTimestamp = matchTimestamp;
-                }
-            }
-        }
-
-        // Check if the last chain is the longest
-        if (currentChain.length > longestChain.length) {
-            longestChain = [...currentChain];
-        }
-
-        // Use the longest chain as our session
-        const sessionMatches = longestChain;
-        const sessionWins = sessionMatches.filter(match => match.stats.Result === '1').length;
-        const sessionLosses = sessionMatches.filter(match => match.stats.Result === '0').length;
+        const todayWins = todayMatches.filter(match => match.stats.Result === '1').length;
+        const todayLosses = todayMatches.filter(match => match.stats.Result === '0').length;
 
         // Calculate win streak
         let streak = 0;
@@ -255,15 +216,15 @@ app.get('/api/stats', async (req, res) => {
             levelImg: LEVEL_ICONS[level],
             elo,
             matches: totalMatches,
-            todayWins: sessionWins,
-            todayLosses: sessionLosses,
+            todayWins,
+            todayLosses,
             avgKD,
             avgKills,
             avgADR,
             streak
         };
 
-        // Cache the response
+        // Cache the response for 5 minutes
         cache.set(cacheKey, responseData);
         res.json(responseData);
 
