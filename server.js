@@ -145,20 +145,59 @@ app.get('/api/stats', async (req, res) => {
             10: 'https://support.faceit.com/hc/article_attachments/10525189646876'
         };
 
-        const statsResponse = await axios.get(
-            `https://open.faceit.com/data/v4/players/${playerId}/stats/cs2`,
+        // Get last 30 matches for calculating recent stats
+        const matchHistoryResponse = await axios.get(
+            `https://open.faceit.com/data/v4/players/${playerId}/history?game=cs2&offset=0&limit=30`,
             {
                 headers: {
                     'Authorization': `Bearer ${FACEIT_API_KEY}`
                 }
             }
         );
+        
+        const matches = matchHistoryResponse.data.items || [];
+        
+        // Calculate today's win/loss from match history
+        const twentyFourHoursAgo = new Date();
+        twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+        
+        // Filter matches from last 24 hours
+        const todayMatches = matches.filter(match => {
+            const matchDate = new Date(match.finished_at * 1000);
+            return matchDate >= twentyFourHoursAgo;
+        });
 
-        // Get total matches from lifetime stats
-        const totalMatches = statsResponse.data.lifetime ? parseInt(statsResponse.data.lifetime.Matches) : 0;
+        // Get detailed stats for today's matches
+        const todayMatchStats = await Promise.all(todayMatches.map(match => 
+            axios.get(
+                `https://open.faceit.com/data/v4/matches/${match.match_id}/stats`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${FACEIT_API_KEY}`
+                    }
+                }
+            )
+        ));
 
-        // Get last 30 matches for calculating recent stats
-        const matchHistoryResponse = await axios.get(
+        // Calculate W/L for today's matches
+        let todayWins = 0;
+        let todayLosses = 0;
+        todayMatchStats.forEach(matchStat => {
+            const teams = matchStat.data.rounds[0].teams;
+            const playerTeam = teams.find(team => 
+                team.players.some(p => p.player_id === playerId)
+            );
+            if (playerTeam) {
+                if (playerTeam.team_stats.Team_Win === '1') {
+                    todayWins++;
+                } else {
+                    todayLosses++;
+                }
+            }
+        });
+
+        // Get stats for last 30 matches for averages
+        const statsResponse = await axios.get(
             `https://open.faceit.com/data/v4/players/${playerId}/games/cs2/stats?offset=0&limit=30`,
             {
                 headers: {
@@ -169,34 +208,20 @@ app.get('/api/stats', async (req, res) => {
         
         let totalKills = 0;
         let totalADR = 0;
-        const matches = matchHistoryResponse.data.items || [];
-        for (const match of matches) {
+        const recentMatches = statsResponse.data.items || [];
+        for (const match of recentMatches) {
             const kills = parseInt(match.stats.Kills || 0);
             const adr = parseFloat(match.stats.ADR || 0);
             totalKills += kills;
             totalADR += adr;
         }
 
-        const avgKills = matches.length > 0 ? (totalKills / matches.length).toFixed(1) : '0';
-        const avgADR = matches.length > 0 ? (totalADR / matches.length).toFixed(1) : '0';
+        const avgKills = recentMatches.length > 0 ? (totalKills / recentMatches.length).toFixed(1) : '0';
+        const avgADR = recentMatches.length > 0 ? (totalADR / recentMatches.length).toFixed(1) : '0';
 
-        // Calculate today's win/loss from match stats
-        const twentyFourHoursAgo = new Date();
-        twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
-        
-        // Filter matches from last 24 hours and calculate W/L
-        const todayMatches = matches.filter(match => {
-            const matchTimestamp = parseInt(match.stats['Match Finished At']) * 1000; // Convert to milliseconds
-            const matchDate = new Date(matchTimestamp);
-            return matchDate >= twentyFourHoursAgo;
-        });
-
-        const todayWins = todayMatches.filter(match => match.stats.Result === '1').length;
-        const todayLosses = todayMatches.filter(match => match.stats.Result === '0').length;
-
-        // Calculate win streak
+        // Calculate win streak from recent matches
         let streak = 0;
-        for (const match of matches) {
+        for (const match of recentMatches) {
             if (match.stats.Result === '1') {
                 streak++;
             } else {
@@ -205,8 +230,8 @@ app.get('/api/stats', async (req, res) => {
         }
 
         // Calculate average K/D
-        const avgKD = matches.length > 0 
-            ? (matches.reduce((sum, match) => sum + parseFloat(match.stats['K/D Ratio'] || 0), 0) / matches.length).toFixed(2)
+        const avgKD = recentMatches.length > 0 
+            ? (recentMatches.reduce((sum, match) => sum + parseFloat(match.stats['K/D Ratio'] || 0), 0) / recentMatches.length).toFixed(2)
             : '0.00';
 
         const responseData = {
@@ -215,7 +240,7 @@ app.get('/api/stats', async (req, res) => {
             level,
             levelImg: LEVEL_ICONS[level],
             elo,
-            matches: totalMatches,
+            matches: recentMatches.length,
             todayWins,
             todayLosses,
             avgKD,
