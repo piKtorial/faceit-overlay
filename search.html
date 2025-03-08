@@ -34,8 +34,9 @@
 
         .search-form {
             display: flex;
-            margin-bottom: 30px;
+            margin-bottom: 45px;
             gap: 10px;
+            position: relative;
         }
 
         input[type="text"] {
@@ -46,6 +47,8 @@
             background-color: #3a3a3a;
             color: white;
             font-size: 16px;
+            height: 45px;
+            box-sizing: border-box;
         }
 
         button {
@@ -58,6 +61,8 @@
             font-weight: bold;
             font-size: 16px;
             transition: background-color 0.2s;
+            height: 45px;
+            box-sizing: border-box;
         }
 
         button:hover {
@@ -172,11 +177,11 @@
 
         .suggestions {
             position: absolute;
-            top: 100%;
+            top: calc(100% + 25px);
             left: 0;
             right: 0;
             background-color: #3a3a3a;
-            border-radius: 0 0 5px 5px;
+            border-radius: 5px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
             max-height: 300px;
             overflow-y: auto;
@@ -185,9 +190,11 @@
         }
 
         .suggestions-loading {
-            padding: 20px;
+            padding: 15px;
             text-align: center;
             display: none;
+            background-color: #3a3a3a;
+            border-radius: 5px;
         }
 
         .suggestions-loading .spinner {
@@ -237,6 +244,16 @@
         .search-wrapper {
             position: relative;
             flex: 1;
+        }
+
+        .search-helper {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            padding-top: 5px;
         }
 
         .spinner {
@@ -293,15 +310,15 @@
         
         <div class="search-form">
             <div class="search-wrapper">
-                <input type="text" id="username" placeholder="Enter FACEIT username" required>
-                <div class="suggestions" id="suggestions">
-                    <div class="suggestions-loading" id="suggestions-loading">
-                        <div class="spinner"></div>
-                        <p>Loading suggestions...</p>
-                    </div>
+                <input type="text" id="searchInput" placeholder="Enter FACEIT username or profile URL">
+                <div class="search-helper">Example: nickname or https://www.faceit.com/en/players/nickname</div>
+                <div class="suggestions"></div>
+                <div class="suggestions-loading">
+                    <div class="spinner"></div>
+                    <div>Loading suggestions...</div>
                 </div>
             </div>
-            <button id="search-btn">Search</button>
+            <button onclick="searchStats()">Search</button>
         </div>
         
         <div class="loading" id="loading">
@@ -391,117 +408,114 @@
             ? 'http://localhost:3001' 
             : window.location.origin;
 
-        let searchTimeout;
-        const usernameInput = document.getElementById('username');
-        const suggestionsContainer = document.getElementById('suggestions');
+        let debounceTimer;
+        const searchInput = document.getElementById('searchInput');
+        const suggestionsDiv = document.querySelector('.suggestions');
+        const suggestionsLoading = document.querySelector('.suggestions-loading');
+        const statsContainer = document.querySelector('.stats-container');
+        const errorMessage = document.querySelector('.error-message');
+        const loading = document.querySelector('.loading');
 
-        usernameInput.addEventListener('input', function() {
-            clearTimeout(searchTimeout);
+        function extractUsername(input) {
+            // Check if input is a FACEIT URL
+            const faceitUrlPattern = /faceit\.com\/[a-z]{2}\/players\/([^\/\?]+)/i;
+            const urlMatch = input.match(faceitUrlPattern);
+            return urlMatch ? urlMatch[1] : input;
+        }
+
+        searchInput.addEventListener('input', function() {
+            clearTimeout(debounceTimer);
             const query = this.value.trim();
             
             if (query.length < 2) {
-                suggestionsContainer.style.display = 'none';
+                suggestionsDiv.style.display = 'none';
                 return;
             }
 
-            searchTimeout = setTimeout(() => fetchSuggestions(query), 300);
-        });
-
-        // Close suggestions when clicking outside
-        document.addEventListener('click', function(e) {
-            if (!e.target.closest('.search-wrapper')) {
-                suggestionsContainer.style.display = 'none';
-            }
-        });
-
-        async function fetchSuggestions(query) {
-            try {
-                // Show loading spinner
-                const suggestionsLoading = document.getElementById('suggestions-loading');
-                const suggestionsContainer = document.getElementById('suggestions');
-                suggestionsContainer.style.display = 'block';
+            debounceTimer = setTimeout(async () => {
+                suggestionsDiv.style.display = 'block';
                 suggestionsLoading.style.display = 'block';
+                suggestionsDiv.innerHTML = '';
 
-                const response = await fetch(`${API_BASE}/api/search-users?q=${encodeURIComponent(query)}`);
-                if (!response.ok) throw new Error('Failed to fetch suggestions');
-                
-                const data = await response.json();
-                console.log('Search suggestions data:', data);
-                displaySuggestions(data.result);
-            } catch (error) {
-                console.error('Error fetching suggestions:', error);
-                suggestionsContainer.style.display = 'none';
-            } finally {
-                // Hide loading spinner
-                document.getElementById('suggestions-loading').style.display = 'none';
-            }
-        }
+                try {
+                    const username = extractUsername(query);
+                    const response = await fetch(`${API_BASE}/api/search-users?q=${encodeURIComponent(username)}`);
+                    const data = await response.json();
 
-        function displaySuggestions(suggestions) {
-            const suggestionsContainer = document.getElementById('suggestions');
-            // Clear previous suggestions but keep the loading div
-            const loadingDiv = document.getElementById('suggestions-loading');
-            suggestionsContainer.innerHTML = '';
-            suggestionsContainer.appendChild(loadingDiv);
-            
-            if (suggestions.length > 0) {
-                console.log('First suggestion data:', suggestions[0]);
-                suggestions.forEach(player => {
-                    const div = document.createElement('div');
-                    div.className = 'suggestion-item';
-                    div.innerHTML = `
-                        <img src="${player.avatar}" alt="" class="suggestion-avatar">
-                        <img src="${player.levelImg}" alt="Level ${player.level}" class="suggestion-level" style="width: 24px; height: 24px;">
-                        <div class="suggestion-info">
-                            <div class="suggestion-name">${player.nickname}</div>
-                            <div class="suggestion-meta">Level ${player.level} • ELO: ${player.elo}</div>
-                        </div>
-                    `;
-                    div.addEventListener('click', () => selectPlayer(player.nickname));
-                    suggestionsContainer.appendChild(div);
-                });
-                suggestionsContainer.style.display = 'block';
-            } else {
-                suggestionsContainer.style.display = 'none';
-            }
-        }
+                    suggestionsLoading.style.display = 'none';
+                    
+                    if (data.result && data.result.length > 0) {
+                        data.result.forEach(player => {
+                            const div = document.createElement('div');
+                            div.className = 'suggestion-item';
+                            const defaultAvatar = 'https://assets.faceit-cdn.net/avatars/d5c43ee5-44ba-4a10-8a13-62bb0299ccc7_1596712535545.jpg';
+                            div.innerHTML = `
+                                <img src="${player.avatar || defaultAvatar}" class="suggestion-avatar" onerror="this.src='${defaultAvatar}'">
+                                <div class="suggestion-info">
+                                    <div class="suggestion-name">${player.nickname}</div>
+                                    <div class="suggestion-meta">Level ${player.level} • ELO: ${player.elo}</div>
+                                </div>
+                                <img src="${player.levelImg}" class="level-icon" style="width: 24px; height: 24px;">
+                            `;
+                            div.addEventListener('click', () => {
+                                searchInput.value = player.nickname;
+                                suggestionsDiv.style.display = 'none';
+                                searchStats();
+                            });
+                            suggestionsDiv.appendChild(div);
+                        });
+                    } else {
+                        suggestionsDiv.innerHTML = '<div class="suggestion-item">No players found</div>';
+                    }
+                } catch (error) {
+                    console.error('Error fetching suggestions:', error);
+                    suggestionsDiv.innerHTML = '<div class="suggestion-item">Error loading suggestions</div>';
+                    suggestionsLoading.style.display = 'none';
+                }
+            }, 300);
+        });
 
-        function selectPlayer(nickname) {
-            usernameInput.value = nickname;
-            suggestionsContainer.style.display = 'none';
-            searchPlayer();
-        }
-
-        document.getElementById('search-btn').addEventListener('click', searchPlayer);
-        usernameInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                searchPlayer();
+        document.addEventListener('click', function(e) {
+            if (!suggestionsDiv.contains(e.target) && e.target !== searchInput) {
+                suggestionsDiv.style.display = 'none';
             }
         });
 
-        async function searchPlayer() {
-            const username = document.getElementById('username').value.trim();
-            if (!username) {
-                showError('Please enter a FACEIT username');
-                return;
-            }
+        const defaultAvatar = 'https://assets.faceit-cdn.net/avatars/d5c43ee5-44ba-4a10-8a13-62bb0299ccc7_1596712535545.jpg';
 
-            // Show loading, hide error and stats
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('error-message').style.display = 'none';
-            document.getElementById('stats-container').style.display = 'none';
+        async function searchStats() {
+            const query = searchInput.value.trim();
+            if (!query) return;
+
+            const username = extractUsername(query);
+            statsContainer.style.display = 'none';
+            errorMessage.style.display = 'none';
+            loading.style.display = 'block';
 
             try {
                 const response = await fetch(`${API_BASE}/api/stats?username=${encodeURIComponent(username)}`);
-                
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.details || 'Failed to fetch stats');
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
                 }
 
-                const data = await response.json();
-                console.log('Stats data:', data);
-                displayStats(data);
+                document.getElementById('player-name').textContent = data.username;
+                document.getElementById('elo').textContent = `${data.elo}`;
+                document.getElementById('profile-avatar').src = data.avatar || defaultAvatar;
+                document.getElementById('profile-avatar').onerror = function() { this.src = defaultAvatar; };
+                document.getElementById('level-icon').src = data.levelImg;
+                
+                document.getElementById('matches').textContent = data.matches;
+                document.getElementById('todayWins').textContent = data.todayWins;
+                document.getElementById('todayLosses').textContent = data.todayLosses;
+                document.getElementById('streak').textContent = data.streak;
+                document.getElementById('avgKills').textContent = data.avgKills;
+                document.getElementById('avgADR').textContent = data.avgADR;
+                document.getElementById('avgKD').textContent = data.avgKD;
+
+                statsContainer.style.display = 'block';
+                loading.style.display = 'none';
                 
                 // Update overlay links
                 const overlay1Link = document.getElementById('overlay1-link');
@@ -509,42 +523,20 @@
                 overlay1Link.href = `overlay.html?username=${encodeURIComponent(username)}`;
                 overlay2Link.href = `overlay2.html?username=${encodeURIComponent(username)}`;
                 document.getElementById('overlay-buttons').style.display = 'flex';
-                
             } catch (error) {
-                showError(error.message || 'An error occurred while fetching stats');
-            } finally {
-                document.getElementById('loading').style.display = 'none';
+                console.error('Error:', error);
+                errorMessage.textContent = error.message || 'Failed to fetch player stats';
+                errorMessage.style.display = 'block';
+                loading.style.display = 'none';
             }
         }
 
-        function displayStats(data) {
-            console.log('Displaying stats with data:', data);
-            document.getElementById('player-name').textContent = data.username;
-            document.getElementById('elo').textContent = data.elo;
-            document.getElementById('matches').textContent = data.matches;
-            document.getElementById('todayWins').textContent = data.todayWins;
-            document.getElementById('todayLosses').textContent = data.todayLosses;
-            document.getElementById('avgKD').textContent = data.avgKD;
-            document.getElementById('avgKills').textContent = data.avgKills || '-';
-            document.getElementById('streak').textContent = data.streak;
-            document.getElementById('avgADR').textContent = data.avgADR || '-';
-            
-            // Set level icon and avatar
-            document.getElementById('level-icon').src = data.levelImg;
-            const avatarUrl = data.avatar || data.avatarUrl;
-            console.log('Setting avatar URL:', avatarUrl);
-            document.getElementById('profile-avatar').src = avatarUrl || 'https://assets.faceit-cdn.net/avatars/default_avatar.jpg';
-            
-            // Show stats container
-            document.getElementById('stats-container').style.display = 'block';
-        }
-
-        function showError(message) {
-            const errorElement = document.getElementById('error-message');
-            errorElement.textContent = message;
-            errorElement.style.display = 'block';
-            document.getElementById('loading').style.display = 'none';
-        }
+        // Allow Enter key to trigger search
+        searchInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchStats();
+            }
+        });
     </script>
 </body>
 </html> 
