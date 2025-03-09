@@ -155,6 +155,7 @@ app.get('/api/stats', async (req, res) => {
             }
         );
         
+        console.log('Match history response:', JSON.stringify(matchHistoryResponse.data, null, 2));
         const matches = matchHistoryResponse.data.items || [];
         
         // Calculate today's win/loss from match history
@@ -164,27 +165,26 @@ app.get('/api/stats', async (req, res) => {
         // Filter matches from last 24 hours
         const todayMatches = matches.filter(match => {
             const matchDate = new Date(match.finished_at * 1000);
+            console.log('Match date:', matchDate, 'Today:', new Date(), '24h ago:', twentyFourHoursAgo);
             return matchDate >= twentyFourHoursAgo;
         });
+
+        console.log('Today matches:', todayMatches.length);
 
         // Calculate W/L for today's matches
         let todayWins = 0;
         let todayLosses = 0;
         
         for (const match of todayMatches) {
-            if (match.results && match.results.score) {
-                const scores = match.results.score.split(' / ');
-                const playerTeamIndex = match.teams.faction1.players.some(p => p.player_id === playerId) ? 0 : 1;
-                const playerScore = parseInt(scores[playerTeamIndex]);
-                const opponentScore = parseInt(scores[1 - playerTeamIndex]);
-                
-                if (playerScore > opponentScore) {
-                    todayWins++;
-                } else {
-                    todayLosses++;
-                }
+            const playerTeam = match.teams.faction1.players.some(p => p.player_id === playerId) ? 'faction1' : 'faction2';
+            if (match.winner === playerTeam) {
+                todayWins++;
+            } else {
+                todayLosses++;
             }
         }
+
+        console.log('Today W/L:', todayWins, todayLosses);
 
         // Get detailed stats for last 30 matches for averages
         const matchStatsResponse = await axios.get(
