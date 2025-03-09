@@ -171,16 +171,34 @@ app.get('/api/stats', async (req, res) => {
 
         console.log('Today matches:', todayMatches.length);
 
-        // Calculate W/L for today's matches
+        // Calculate W/L for today's matches using the same logic as win streak
         let todayWins = 0;
         let todayLosses = 0;
         
-        for (const match of todayMatches) {
-            const playerTeam = match.teams.faction1.players.some(p => p.player_id === playerId) ? 'faction1' : 'faction2';
-            if (match.winner === playerTeam) {
-                todayWins++;
-            } else {
-                todayLosses++;
+        // Get detailed stats for today's matches
+        const todayMatchStats = await Promise.all(todayMatches.map(match => 
+            axios.get(
+                `https://open.faceit.com/data/v4/matches/${match.match_id}/stats`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${FACEIT_API_KEY}`
+                    }
+                }
+            )
+        ));
+
+        // Process each match's stats
+        for (const matchStat of todayMatchStats) {
+            const teams = matchStat.data.rounds[0].teams;
+            const playerTeam = teams.find(team => 
+                team.players.some(p => p.player_id === playerId)
+            );
+            if (playerTeam) {
+                if (playerTeam.team_stats.Team_Win === '1') {
+                    todayWins++;
+                } else {
+                    todayLosses++;
+                }
             }
         }
 
