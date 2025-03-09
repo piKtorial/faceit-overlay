@@ -145,65 +145,6 @@ app.get('/api/stats', async (req, res) => {
         // Get total matches from lifetime stats
         const totalMatches = statsResponse.data.lifetime ? parseInt(statsResponse.data.lifetime.Matches) : 0;
 
-        // Get last 30 matches for calculating recent stats
-        const matchHistoryResponse = await axios.get(
-            `https://open.faceit.com/data/v4/players/${playerId}/history?game=cs2&offset=0&limit=30`,
-            {
-                headers: {
-                    'Authorization': `Bearer ${FACEIT_API_KEY}`
-                }
-            }
-        );
-        
-        console.log('Match history response:', JSON.stringify(matchHistoryResponse.data, null, 2));
-        const matches = matchHistoryResponse.data.items || [];
-        
-        // Calculate today's win/loss from match history
-        const twentyFourHoursAgo = new Date();
-        twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
-        
-        // Filter matches from last 24 hours
-        const todayMatches = matches.filter(match => {
-            const matchDate = new Date(match.finished_at * 1000);
-            console.log('Match date:', matchDate, 'Today:', new Date(), '24h ago:', twentyFourHoursAgo);
-            return matchDate >= twentyFourHoursAgo;
-        });
-
-        console.log('Today matches:', todayMatches.length);
-
-        // Calculate W/L for today's matches using the same logic as win streak
-        let todayWins = 0;
-        let todayLosses = 0;
-        
-        // Get detailed stats for today's matches
-        const todayMatchStats = await Promise.all(todayMatches.map(match => 
-            axios.get(
-                `https://open.faceit.com/data/v4/matches/${match.match_id}/stats`,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${FACEIT_API_KEY}`
-                    }
-                }
-            )
-        ));
-
-        // Process each match's stats
-        for (const matchStat of todayMatchStats) {
-            const teams = matchStat.data.rounds[0].teams;
-            const playerTeam = teams.find(team => 
-                team.players.some(p => p.player_id === playerId)
-            );
-            if (playerTeam) {
-                if (playerTeam.team_stats.Team_Win === '1') {
-                    todayWins++;
-                } else {
-                    todayLosses++;
-                }
-            }
-        }
-
-        console.log('Today W/L:', todayWins, todayLosses);
-
         // Get detailed stats for last 30 matches for averages
         const matchStatsResponse = await axios.get(
             `https://open.faceit.com/data/v4/players/${playerId}/games/cs2/stats?offset=0&limit=30`,
@@ -214,9 +155,32 @@ app.get('/api/stats', async (req, res) => {
             }
         );
         
+        const recentMatches = matchStatsResponse.data.items || [];
+
+        // Calculate today's W/L from recent matches
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+
+        // Filter and sort matches from today
+        const todayMatches = recentMatches.filter(match => {
+            const matchTimestamp = parseInt(match.stats['Match Finished At']) * 1000;
+            const matchDate = new Date(matchTimestamp);
+            return matchDate >= startOfToday;
+        }).sort((a, b) => {
+            const aTime = parseInt(a.stats['Match Finished At']);
+            const bTime = parseInt(b.stats['Match Finished At']);
+            return bTime - aTime; // Sort newest first
+        });
+
+        // Calculate W/L for today's matches
+        const todayWins = todayMatches.filter(match => match.stats.Result === '1').length;
+        const todayLosses = todayMatches.filter(match => match.stats.Result === '0').length;
+
+        console.log('Today matches:', todayMatches.length, 'W/L:', todayWins, todayLosses);
+
+        // Calculate averages from all recent matches
         let totalKills = 0;
         let totalADR = 0;
-        const recentMatches = matchStatsResponse.data.items || [];
         for (const match of recentMatches) {
             const kills = parseInt(match.stats.Kills || 0);
             const adr = parseFloat(match.stats.ADR || 0);
