@@ -167,34 +167,20 @@ app.get('/api/stats', async (req, res) => {
             return matchDate >= twentyFourHoursAgo;
         });
 
-        // Get detailed stats for today's matches
-        const todayMatchStats = await Promise.all(todayMatches.map(match => 
-            axios.get(
-                `https://open.faceit.com/data/v4/matches/${match.match_id}/stats`,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${FACEIT_API_KEY}`
-                    }
-                }
-            )
-        ));
-
         // Calculate W/L for today's matches
         let todayWins = 0;
         let todayLosses = 0;
-        todayMatchStats.forEach(matchStat => {
-            const teams = matchStat.data.rounds[0].teams;
-            const playerTeam = teams.find(team => 
-                team.players.some(p => p.player_id === playerId)
-            );
+        
+        for (const match of todayMatches) {
+            const playerTeam = match.teams[match.player_team.toLowerCase()];
             if (playerTeam) {
-                if (playerTeam.team_stats.Team_Win === '1') {
+                if (match.results.winner === match.player_team.toLowerCase()) {
                     todayWins++;
                 } else {
                     todayLosses++;
                 }
             }
-        });
+        }
 
         // Get stats for last 30 matches for averages
         const statsResponse = await axios.get(
