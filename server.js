@@ -132,18 +132,18 @@ app.get('/api/stats', async (req, res) => {
         const level = cs2Data ? parseInt(cs2Data.skill_level) : 1;
         const elo = cs2Data ? cs2Data.faceit_elo : '-';
 
-        const LEVEL_ICONS = {
-            1: 'https://support.faceit.com/hc/article_attachments/10525200575516',
-            2: 'https://support.faceit.com/hc/article_attachments/10525189649308',
-            3: 'https://support.faceit.com/hc/article_attachments/10525200576796',
-            4: 'https://support.faceit.com/hc/article_attachments/10525185037724',
-            5: 'https://support.faceit.com/hc/article_attachments/10525215800860',
-            6: 'https://support.faceit.com/hc/article_attachments/10525245409692',
-            7: 'https://support.faceit.com/hc/article_attachments/10525185034012',
-            8: 'https://support.faceit.com/hc/article_attachments/10525189648796',
-            9: 'https://support.faceit.com/hc/article_attachments/10525200576028',
-            10: 'https://support.faceit.com/hc/article_attachments/10525189646876'
-        };
+        // Get lifetime stats first for total matches
+        const statsResponse = await axios.get(
+            `https://open.faceit.com/data/v4/players/${playerId}/stats/cs2`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${FACEIT_API_KEY}`
+                }
+            }
+        );
+
+        // Get total matches from lifetime stats
+        const totalMatches = statsResponse.data.lifetime ? parseInt(statsResponse.data.lifetime.Matches) : 0;
 
         // Get last 30 matches for calculating recent stats
         const matchHistoryResponse = await axios.get(
@@ -172,9 +172,13 @@ app.get('/api/stats', async (req, res) => {
         let todayLosses = 0;
         
         for (const match of todayMatches) {
-            const playerTeam = match.teams[match.player_team.toLowerCase()];
-            if (playerTeam) {
-                if (match.results.winner === match.player_team.toLowerCase()) {
+            if (match.results && match.results.score) {
+                const scores = match.results.score.split(' / ');
+                const playerTeamIndex = match.teams.faction1.players.some(p => p.player_id === playerId) ? 0 : 1;
+                const playerScore = parseInt(scores[playerTeamIndex]);
+                const opponentScore = parseInt(scores[1 - playerTeamIndex]);
+                
+                if (playerScore > opponentScore) {
                     todayWins++;
                 } else {
                     todayLosses++;
@@ -182,8 +186,8 @@ app.get('/api/stats', async (req, res) => {
             }
         }
 
-        // Get stats for last 30 matches for averages
-        const statsResponse = await axios.get(
+        // Get detailed stats for last 30 matches for averages
+        const matchStatsResponse = await axios.get(
             `https://open.faceit.com/data/v4/players/${playerId}/games/cs2/stats?offset=0&limit=30`,
             {
                 headers: {
@@ -194,7 +198,7 @@ app.get('/api/stats', async (req, res) => {
         
         let totalKills = 0;
         let totalADR = 0;
-        const recentMatches = statsResponse.data.items || [];
+        const recentMatches = matchStatsResponse.data.items || [];
         for (const match of recentMatches) {
             const kills = parseInt(match.stats.Kills || 0);
             const adr = parseFloat(match.stats.ADR || 0);
@@ -220,13 +224,26 @@ app.get('/api/stats', async (req, res) => {
             ? (recentMatches.reduce((sum, match) => sum + parseFloat(match.stats['K/D Ratio'] || 0), 0) / recentMatches.length).toFixed(2)
             : '0.00';
 
+        const LEVEL_ICONS = {
+            1: 'https://support.faceit.com/hc/article_attachments/10525200575516',
+            2: 'https://support.faceit.com/hc/article_attachments/10525189649308',
+            3: 'https://support.faceit.com/hc/article_attachments/10525200576796',
+            4: 'https://support.faceit.com/hc/article_attachments/10525185037724',
+            5: 'https://support.faceit.com/hc/article_attachments/10525215800860',
+            6: 'https://support.faceit.com/hc/article_attachments/10525245409692',
+            7: 'https://support.faceit.com/hc/article_attachments/10525185034012',
+            8: 'https://support.faceit.com/hc/article_attachments/10525189648796',
+            9: 'https://support.faceit.com/hc/article_attachments/10525200576028',
+            10: 'https://support.faceit.com/hc/article_attachments/10525189646876'
+        };
+
         const responseData = {
             username: playerResponse.data.nickname,
             avatar: playerResponse.data.avatar,
             level,
             levelImg: LEVEL_ICONS[level],
             elo,
-            matches: recentMatches.length,
+            matches: totalMatches,
             todayWins,
             todayLosses,
             avgKD,
